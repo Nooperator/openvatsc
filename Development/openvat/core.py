@@ -69,13 +69,13 @@ def setup_vat_tracker(vat_scene, obj_name, num_frames, width, height, num_wraps,
 
     if use_custom:
         mod["Socket_23"] = True
-        mod["Socket_20"] = original_scene.vat_settings.custom_attr_1
-        mod["Socket_26"] = original_scene.vat_settings.custom_attr_2
-        mod["Socket_27"] = original_scene.vat_settings.custom_attr_3
+        mod["Socket_20"] = original_scene.openvat_111_settings.custom_attr_1
+        mod["Socket_26"] = original_scene.openvat_111_settings.custom_attr_2
+        mod["Socket_27"] = original_scene.openvat_111_settings.custom_attr_3
         if custom_remap:
             mod["Socket_22"] = True
     else:
-        if bpy.data.scenes[original_scene.name].vat_settings.vat_normal_encoding == 'PACKED':
+        if bpy.data.scenes[original_scene.name].openvat_111_settings.vat_normal_encoding == 'PACKED':
             normal_tracker = tracker_plane.copy()
             normal_tracker.data = tracker_plane.data.copy()
             vat_scene.collection.objects.link(normal_tracker)
@@ -87,7 +87,7 @@ def setup_vat_tracker(vat_scene, obj_name, num_frames, width, height, num_wraps,
         
 def setup_proxy_scene(obj, num_frames, width, height, num_wraps, temp_obj, pack_normals, framestart):
     original_scene = bpy.context.scene
-    settings = original_scene.vat_settings
+    settings = original_scene.openvat_111_settings
     
     bpy.ops.scene.new(type='NEW')
     proxy_scene = bpy.context.scene
@@ -120,7 +120,7 @@ def setup_proxy_scene(obj, num_frames, width, height, num_wraps, temp_obj, pack_
     setup_vat_scene(proxy_obj, obj.name, original_scene.name, num_frames, width, height, num_wraps, pack_normals)
     
     # Get VAT Result
-    base_format = ''.join(filter(str.isalpha, original_scene.vat_settings.image_format))
+    base_format = ''.join(filter(str.isalpha, original_scene.openvat_111_settings.image_format))
     image_extension = '.' + base_format.lower()
     image_result = bpy.data.images[obj.name.replace("_ovbake", "") + "_vat" + image_extension]
     
@@ -157,10 +157,10 @@ def setup_proxy_scene(obj, num_frames, width, height, num_wraps, temp_obj, pack_
     bpy.ops.object.editmode_toggle()
     vat_obj.name = obj.name.replace("_ovbake", "_vat")
     
-    # Move to OpenVATPreview collection
-    vat_coll = bpy.data.collections.get("OpenVATPreview")
+    # Move to this side-by-side build's preview collection.
+    vat_coll = bpy.data.collections.get("OpenVAT111Preview")
     if not vat_coll:
-        vat_coll = bpy.data.collections.new("OpenVATPreview")
+        vat_coll = bpy.data.collections.new("OpenVAT111Preview")
         #original_scene.collection.children.link(vat_coll)
     
     original_scene.collection.objects.unlink(vat_obj)
@@ -185,7 +185,7 @@ def setup_vat_scene(proxy_obj, obj_name, original_scene_name, num_frames, width,
     vat_scene = bpy.context.scene
     vat_scene.name = f"{obj_name}_vat"
     original_scene = bpy.data.scenes[original_scene_name]
-    output_dir = bpy.path.abspath(original_scene.vat_settings.vat_output_directory)
+    output_dir = bpy.path.abspath(original_scene.openvat_111_settings.vat_output_directory)
     
     vat_scene.frame_start = bpy.data.scenes[original_scene_name].frame_start
     vat_scene.frame_end = bpy.data.scenes[original_scene_name].frame_end
@@ -203,7 +203,7 @@ def setup_vat_scene(proxy_obj, obj_name, original_scene_name, num_frames, width,
     vat_scene.view_settings.view_transform = 'Raw'
     vat_scene.render.film_transparent = True
     
-    fmt = original_scene.vat_settings.image_format
+    fmt = original_scene.openvat_111_settings.image_format
     img_settings = vat_scene.render.image_settings
 
     if fmt in {'PNG8', 'PNG16'}:
@@ -238,7 +238,7 @@ def setup_vat_scene(proxy_obj, obj_name, original_scene_name, num_frames, width,
 
     nodegroup_method = "ov_calculate-position-vs"
     
-    encode_settings = original_scene.vat_settings
+    encode_settings = original_scene.openvat_111_settings
     use_custom = False
     custom_attribute = ""
     custom_remap = False
@@ -261,16 +261,16 @@ def setup_vat_scene(proxy_obj, obj_name, original_scene_name, num_frames, width,
     vat_scene.render.filepath = output_path
 
     #un-normalize
-    if original_scene.vat_settings.image_format == "EXR32":
-        if original_scene.vat_settings.no_remap:
+    if original_scene.openvat_111_settings.image_format == "EXR32":
+        if original_scene.openvat_111_settings.no_remap:
             setup_unnormalize(vat_scene,original_scene,"os-remap")
             bpy.ops.render.render(write_still=True)
             bpy.data.images[output_name+".exr"].reload()
     
     # Render VNRM
     if not pack_normals: 
-        if bpy.data.scenes[original_scene_name].vat_settings.encode_type == 'DEFAULT':
-            if bpy.data.scenes[original_scene_name].vat_settings.vat_normal_encoding != 'NONE':
+        if bpy.data.scenes[original_scene_name].openvat_111_settings.encode_type == 'DEFAULT':
+            if bpy.data.scenes[original_scene_name].openvat_111_settings.vat_normal_encoding != 'NONE':
                 print ("Starting normals render process...")
                 bpy.context.object.modifiers[-1]["Socket_17"] = True
                 rendername = vat_scene.name.replace("_ovbake_vat", "_vnrm")
@@ -503,7 +503,7 @@ def export_vat_model(file_format='FBX', include_materials=False, include_tangent
 
     bpy.ops.mesh.customdata_custom_splitnormals_add()
 
-    export_directory = bpy.path.abspath(bpy.context.scene.vat_settings.vat_output_directory)
+    export_directory = bpy.path.abspath(bpy.context.scene.openvat_111_settings.vat_output_directory)
     object_directory = os.path.join(export_directory, obj.name)
     os.makedirs(object_directory, exist_ok=True)
 
@@ -559,7 +559,7 @@ def export_vat_model(file_format='FBX', include_materials=False, include_tangent
 def create_geo_nodes_bake(use_collection=False, collection_name=""):
     context = bpy.context
     scene = context.scene
-    vat_settings = scene.vat_settings
+    vat_settings = scene.openvat_111_settings
     
     active_obj = context.active_object
     if not use_collection:
@@ -656,16 +656,16 @@ def create_geo_nodes_bake(use_collection=False, collection_name=""):
 
     scene = bpy.context.scene  # Make sure 'scene' is defined
 
-    # Ensure OpenVATPreview collection exists
-    vat_coll = bpy.data.collections.get("OpenVATPreview")
+    # Ensure this side-by-side build's preview collection exists.
+    vat_coll = bpy.data.collections.get("OpenVAT111Preview")
     if not vat_coll:
-        vat_coll = bpy.data.collections.new("OpenVATPreview")
+        vat_coll = bpy.data.collections.new("OpenVAT111Preview")
         scene.collection.children.link(vat_coll)
     # If it exists but isn't linked into this scene, link it
     elif vat_coll.name not in {c.name for c in scene.collection.children}:
         scene.collection.children.link(vat_coll)
 
-    # Move object into OpenVATPreview
+    # Move object into this side-by-side build's preview collection.
     for c in obj.users_collection:
         c.objects.unlink(obj)
     vat_coll.objects.link(obj)

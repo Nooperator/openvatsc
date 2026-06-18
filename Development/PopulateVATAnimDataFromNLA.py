@@ -4,62 +4,71 @@ import bpy
 # CONFIG
 # ------------------------------------------------------------
 
-START_FRAME = 1
-GAP_FRAMES = 0
-
-USE_ACTIVE_OBJECT_ONLY = True
 CLEAR_EXISTING_VAT_DATA = True
-
-# If True, strip names use the Action name when available.
-# If False, strip names use the NLA strip name.
-USE_ACTION_NAME = True
 
 
 # ------------------------------------------------------------
 # HELPERS
 # ------------------------------------------------------------
 
-def get_target_objects():
-    if USE_ACTIVE_OBJECT_ONLY:
-        obj = bpy.context.object
-        return [obj] if obj else []
+def get_action_manual_range(action):
+    if not hasattr(action, "use_frame_range"):
+        return None, None, "manual frame range flag is unavailable"
 
-    return [obj for obj in bpy.context.selected_objects if obj.animation_data]
+    if not action.use_frame_range:
+        return None, None, "manual frame range is disabled"
+
+    if not hasattr(action, "frame_start") or not hasattr(action, "frame_end"):
+        return None, None, "manual frame range values are unavailable"
+
+    try:
+        start_frame = round(action.frame_start)
+        end_frame = round(action.frame_end)
+    except TypeError:
+        return None, None, "manual frame range values are invalid"
+
+    if end_frame < start_frame:
+        return None, None, f"end frame {end_frame} is before start frame {start_frame}"
+
+    return start_frame, end_frame, None
 
 
-def get_nla_strips(obj):
-    anim_data = obj.animation_data
-    if not anim_data:
-        return []
+def get_valid_actions():
+    valid_actions = []
+    skipped_actions = []
 
-    strips = []
+    for action in bpy.data.actions:
+        start_frame, end_frame, skip_reason = get_action_manual_range(action)
 
-    for track_index, track in enumerate(anim_data.nla_tracks):
-        if track.mute:
+        if skip_reason:
+            skipped_actions.append({
+                "name": action.name,
+                "reason": skip_reason,
+            })
             continue
 
-        for strip_index, strip in enumerate(track.strips):
-            if strip.mute:
-                continue
+        valid_actions.append({
+            "action": action,
+            "start_frame": start_frame,
+            "end_frame": end_frame,
+        })
 
-            strips.append({
-                "object": obj,
-                "track": track,
-                "strip": strip,
-                "track_index": track_index,
-                "strip_index": strip_index,
-                "original_start": strip.frame_start,
-            })
-
-    # Stable order based on current NLA layout
-    strips.sort(key=lambda x: (
-        x["original_start"],
-        x["track_index"],
-        x["strip_index"],
-        x["object"].name
+    valid_actions.sort(key=lambda item: (
+        item["start_frame"],
+        item["end_frame"],
+        item["action"].name,
     ))
 
-    return strips
+    return valid_actions, skipped_actions
+
+
+def print_skipped_actions(skipped_actions):
+    if not skipped_actions:
+        return
+
+    print(f"Skipped {len(skipped_actions)} Action(s):")
+    for item in skipped_actions:
+        print(f"  - {item['name']}: {item['reason']}")
 
 
 def clear_vat_anim_data(scene):
@@ -86,59 +95,28 @@ def add_vat_entry(scene, name, start_frame, end_frame):
 # ------------------------------------------------------------
 
 scene = bpy.context.scene
-objects = get_target_objects()
+valid_actions, skipped_actions = get_valid_actions()
 
-if not objects:
-    raise RuntimeError("No valid animated object found.")
-
-all_strips = []
-
-for obj in objects:
-    all_strips.extend(get_nla_strips(obj))
-
-if not all_strips:
-    raise RuntimeError("No usable NLA strips found.")
+if not valid_actions:
+    print_skipped_actions(skipped_actions)
+    raise RuntimeError("No Actions with valid manual frame ranges found.")
 
 if CLEAR_EXISTING_VAT_DATA:
     clear_vat_anim_data(scene)
 
-cursor = START_FRAME
-
-for item in all_strips:
-    obj = item["object"]
-    strip = item["strip"]
-
-    # Keep the visible timeline duration exactly as currently authored.
-    duration = strip.frame_end - strip.frame_start
-
-    new_start = cursor
-    new_end = cursor + duration
-
-    strip.frame_start = new_start
-    strip.frame_end = new_end
-
-    name_source = strip.action.name if USE_ACTION_NAME and strip.action else strip.name
-
-    # Optional: prefix object name if processing multiple objects.
-    if not USE_ACTIVE_OBJECT_ONLY:
-        clip_name = f"{obj.name}_{name_source}"
-    else:
-        clip_name = name_source
-
-    # VAT ranges are usually integer frame ranges.
-    # End frame is rounded down from strip.frame_end.
+for item in valid_actions:
+    action = item["action"]
     add_vat_entry(
         scene,
-        clip_name,
-        round(strip.frame_start),
-        round(strip.frame_end)
+        action.name,
+        item["start_frame"],
+        item["end_frame"],
     )
 
-    cursor = new_end + GAP_FRAMES
+scene.frame_start = min(item["start_frame"] for item in valid_actions)
+scene.frame_end = max(item["end_frame"] for item in valid_actions)
 
-scene.frame_start = START_FRAME
-scene.frame_end = round(cursor - GAP_FRAMES)
-
-print("Sequential NLA layout complete.")
-print(f"Created {len(scene.vat_anim_data)} VAT animation entries.")
+print_skipped_actions(skipped_actions)
+print("Action frame range VAT metadata population complete.")
+print(f"Created {len(valid_actions)} VAT animation entries.")
 print(f"Timeline range: {scene.frame_start} - {scene.frame_end}")

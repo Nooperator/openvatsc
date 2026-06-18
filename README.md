@@ -1,11 +1,11 @@
 # OpenVAT – Vertex Animation Toolkit for Blender
 
 **Author:** Luke Stilson  
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Blender Compatibility:** 4.2.0+  5.0 now supported and backwards compatible, please report any issues with 5.0 or issues with previous versions that may arise from this update. 
 **Versions:** Check Development/Builds folder for previous stable builds
 
-## New in 1.1.0
+## New in 1.1.1
 ### Animation Data Panel
 A new **Animation Data** panel has been added.
 
@@ -120,7 +120,7 @@ Immediately after VAT creation, a new object will be added to the scene as a cop
 - Blender coordinate system: `-Z Forward, Y Up`
 - EXR exports: 16-bit ZIP compression, no dithering
 - PNG exports: 16-bit RGBA, best compatibility
-- VAT Preview scene: auto-created and linked to “OpenVATPreview” collection
+- VAT Preview scene: auto-created and linked to “OpenVAT111Preview” collection in this side-by-side build
 - Scene cleanup: automatic post-encoding
 
 ** Using tangent-space normal maps on VAT-animated meshes can be tricky. In most cases, it is recommended to use an object-space baked normal map for surface detail, and comine this with the animated VAT normal for proper surface lighting during deformation. This requires alteration to the default provided shaders.

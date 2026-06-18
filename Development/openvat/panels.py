@@ -3,17 +3,17 @@ import os
 from . import utils
 from . import operators
 
-class OBJECT_PT_VAT_OPTIONS(bpy.types.Panel):
-    bl_idname = "OBJECT_PT_vat_options"
-    bl_label = "OpenVAT Encoding"
+class OBJECT_PT_OPENVAT111_OPTIONS(bpy.types.Panel):
+    bl_idname = "OBJECT_PT_openvat_111_options"
+    bl_label = "OpenVAT 1.1.1 Encoding"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'OpenVAT'
+    bl_category = 'OpenVAT 1.1.1'
 
     def draw(self, context):
         layout = self.layout
         obj = context.object
-        settings = context.scene.vat_settings
+        settings = context.scene.openvat_111_settings
         scene = context.scene
         
         grid = layout.grid_flow(row_major=True, columns=2, even_columns=True, even_rows=True, align=True)
@@ -65,7 +65,7 @@ class OBJECT_PT_VAT_OPTIONS(bpy.types.Panel):
        
         else:
             box = layout.box()
-            box.operator("object.scan_attributes", text="Scan For Attributes", icon='VIEWZOOM')
+            box.operator("object.openvat_111_scan_attributes", text="Scan For Attributes", icon='VIEWZOOM')
             box.prop(settings, "custom_attr_1", text="R Channel")
             box.prop(settings, "custom_attr_2", text="G Channel")
             box.prop(settings, "custom_attr_3", text="B Channel")
@@ -80,17 +80,17 @@ class OBJECT_PT_VAT_OPTIONS(bpy.types.Panel):
             row.prop(settings, "rip_edges", toggle=True)
         
 # Output Settings - relating to data being exported      
-class OBJECT_PT_VAT_OUTPUT(bpy.types.Panel):
-    bl_idname = "OBJECT_PT_vat_output"
-    bl_label = "OpenVAT Output"
+class OBJECT_PT_OPENVAT111_OUTPUT(bpy.types.Panel):
+    bl_idname = "OBJECT_PT_openvat_111_output"
+    bl_label = "OpenVAT 1.1.1 Output"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'OpenVAT'
+    bl_category = 'OpenVAT 1.1.1'
 
     def draw(self, context):
         layout = self.layout
         obj = context.object
-        settings = context.scene.vat_settings
+        settings = context.scene.openvat_111_settings
         scene = context.scene  
         
         row = layout.row(align=True)
@@ -105,15 +105,15 @@ class OBJECT_PT_VAT_OUTPUT(bpy.types.Panel):
                 layout.label(text="No valid mesh object selected", icon='ERROR')
                 return
             for coll in obj.users_collection:
-                if coll.name == 'OpenVATPreview':
-                    layout.label(text="Target in OpenVATPreview collection is not allowed", icon='ERROR')
+                if coll.name == 'OpenVAT111Preview':
+                    layout.label(text="Target in OpenVAT111Preview collection is not allowed", icon='ERROR')
                     return
         else:
             if not settings.vat_collection:
                 layout.label(text="No valid collection selected", icon='ERROR')
                 return
-            if settings.vat_collection.name == "OpenVATPreview":
-                layout.label(text="Collection 'OpenVATPreview' cannot be targeted", icon='ERROR')
+            if settings.vat_collection.name == "OpenVAT111Preview":
+                layout.label(text="Collection 'OpenVAT111Preview' cannot be targeted", icon='ERROR')
                 return
             has_mesh = any(o.type == 'MESH' and len(o.data.vertices) > 0 for o in settings.vat_collection.all_objects)
             if not has_mesh:
@@ -128,7 +128,7 @@ class OBJECT_PT_VAT_OUTPUT(bpy.types.Panel):
         abs_path = bpy.path.abspath(settings.vat_output_directory)
         
         if os.path.isdir(abs_path):
-            row.operator("object.calculate_vat_resolution", text="Encode Vertex Animation Texture", icon='MOD_DATA_TRANSFER')
+            row.operator("object.openvat_111_calculate_vat_resolution", text="Encode Vertex Animation Texture", icon='MOD_DATA_TRANSFER')
         else:
             row.label(text="Export directory not set", icon='WARNING_LARGE')
         abs_path = bpy.path.abspath(settings.vat_output_directory)
@@ -173,7 +173,7 @@ class OBJECT_PT_VAT_OUTPUT(bpy.types.Panel):
                 maxwidth = max_verts 
                 maxheight = num_frames * (2 if settings.vat_normal_encoding == 'PACKED' else 1)
             else:
-                if settings.vat_normal_encoding == 'PACKED' and bpy.context.scene.vat_settings.encode_type == 'DEFAULT':
+                if settings.vat_normal_encoding == 'PACKED' and bpy.context.scene.openvat_111_settings.encode_type == 'DEFAULT':
                     width, height, _ = utils.calculate_packed_vat_resolution(num_vertices, num_frames)
                     maxwidth, maxheight, _ = utils.calculate_packed_vat_resolution(max_verts, num_frames)
                 else:
@@ -214,4 +214,4 @@ class OBJECT_PT_VAT_OUTPUT(bpy.types.Panel):
                 row.label(text="Resolution calculated per batch object", icon="OUTLINER_OB_IMAGE")
                 
 
-classes = [OBJECT_PT_VAT_OPTIONS, OBJECT_PT_VAT_OUTPUT]
+classes = [OBJECT_PT_OPENVAT111_OPTIONS, OBJECT_PT_OPENVAT111_OUTPUT]

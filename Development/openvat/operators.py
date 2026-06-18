@@ -3,15 +3,15 @@ import os
 import bmesh
 from . import utils, core
 
-class OBJECT_OT_OpenOutputDirectory(bpy.types.Operator):
-    bl_idname = "object.open_output_directory"
+class OBJECT_OT_OPENVAT111_OpenOutputDirectory(bpy.types.Operator):
+    bl_idname = "object.openvat_111_open_output_directory"
     bl_label = "Open Output Directory"
     bl_description = "Open the output directory in the system file explorer"
 
     def execute(self, context):
         import os
         import subprocess
-        output_dir = bpy.path.abspath(context.scene.vat_settings.vat_output_directory)
+        output_dir = bpy.path.abspath(context.scene.openvat_111_settings.vat_output_directory)
         if os.path.isdir(output_dir):
             subprocess.Popen(f'explorer "{output_dir}"' if os.name == 'nt' else ['xdg-open', output_dir])
             return {'FINISHED'}
@@ -19,16 +19,16 @@ class OBJECT_OT_OpenOutputDirectory(bpy.types.Operator):
             self.report({'ERROR'}, "Directory does not exist")
             return {'CANCELLED'}
 
-class OBJECT_OT_CalculateVATResolution(bpy.types.Operator):
-    bl_idname = "object.calculate_vat_resolution"
+class OBJECT_OT_OPENVAT111_CalculateVATResolution(bpy.types.Operator):
+    bl_idname = "object.openvat_111_calculate_vat_resolution"
     bl_label = "Calculate VAT Resolution"
     bl_description = "Export a UV-Based Vertex Animation Texture, sidecar data and compatible model to the defined Export location"
 
     def execute(self, context):
-        settings = context.scene.vat_settings
-        outDir = bpy.path.abspath(bpy.context.scene.vat_settings.vat_output_directory)
+        settings = context.scene.openvat_111_settings
+        outDir = bpy.path.abspath(bpy.context.scene.openvat_111_settings.vat_output_directory)
         blend_filepath = bpy.data.filepath
-        export_directory = bpy.path.abspath(context.scene.vat_settings.vat_output_directory)
+        export_directory = bpy.path.abspath(context.scene.openvat_111_settings.vat_output_directory)
         selected_temp = None
 
         # Validate custom attributes
@@ -230,7 +230,7 @@ class OBJECT_OT_CalculateVATResolution(bpy.types.Operator):
         core.setup_proxy_scene(obj, num_frames, width, height, num_wraps, temp_obj, pack_normals, frame_start)
         
         # Clean up creation data
-        if context.scene.vat_settings.vat_cleanup_enabled:
+        if context.scene.openvat_111_settings.vat_cleanup_enabled:
             print("Cleaning up temporary node_groups, objects, and modifiers")
             if custom_proxy == False:
                 bpy.data.objects.remove(temp_obj)
@@ -245,8 +245,8 @@ class OBJECT_OT_CalculateVATResolution(bpy.types.Operator):
     
         return {'FINISHED'}
 
-class OBJECT_OT_ScanFloatPointAttributes(bpy.types.Operator):
-    bl_idname = "object.scan_attributes"
+class OBJECT_OT_OPENVAT111_ScanFloatPointAttributes(bpy.types.Operator):
+    bl_idname = "object.openvat_111_scan_attributes"
     bl_label = "Scan Float Attributes"
     bl_description = "Scan the active object for float point attributes"
 
@@ -263,7 +263,7 @@ class OBJECT_OT_ScanFloatPointAttributes(bpy.types.Operator):
             items = [("NONE", "None", "")]
 
         # Pre-clear selection to make enums update
-        settings = context.scene.vat_settings
+        settings = context.scene.openvat_111_settings
         settings.custom_attr_1 = "NONE"
         settings.custom_attr_2 = "NONE"
         settings.custom_attr_3 = "NONE"
@@ -288,4 +288,8 @@ class OBJECT_OT_ScanFloatPointAttributes(bpy.types.Operator):
 
 
 
-classes = [OBJECT_OT_CalculateVATResolution, OBJECT_OT_OpenOutputDirectory, OBJECT_OT_ScanFloatPointAttributes]
+classes = [
+    OBJECT_OT_OPENVAT111_CalculateVATResolution,
+    OBJECT_OT_OPENVAT111_OpenOutputDirectory,
+    OBJECT_OT_OPENVAT111_ScanFloatPointAttributes,
+]

@@ -9,7 +9,7 @@ def make_dynamic_enum(idname):
         return base
     return callback
 
-class VATSettings(bpy.types.PropertyGroup):
+class OpenVAT111Settings(bpy.types.PropertyGroup):
     vat_output_directory: bpy.props.StringProperty(
         name="Output Directory",
         description="Directory (folder) to save exported content",
@@ -189,4 +189,4 @@ class VATSettings(bpy.types.PropertyGroup):
     )
 
 
-classes = [VATSettings]
+classes = [OpenVAT111Settings]
