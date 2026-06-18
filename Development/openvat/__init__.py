@@ -1,9 +1,9 @@
 """
-Title: OpenVAT 1.1.1 Encoder
+Title: OpenVAT 1.1.5 Encoder
 Description: Encode and preview vertex animation textures
 Author: Luke Stilson
 Date: 2025-04-29
-Version: 1.1.1
+Version: 1.1.5
 
 """
 
@@ -20,11 +20,13 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.openvat_111_settings = bpy.props.PointerProperty(type=props.OpenVAT111Settings)
+    bpy.types.Scene.openvat_111_anim_data = bpy.props.CollectionProperty(type=props.OpenVAT111AnimationEntry)
 
 def unregister():
+    del bpy.types.Scene.openvat_111_anim_data
+    del bpy.types.Scene.openvat_111_settings
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
-    del bpy.types.Scene.openvat_111_settings
 
 
 if __name__ == "__main__":

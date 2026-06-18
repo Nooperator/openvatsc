@@ -53,16 +53,22 @@ class OBJECT_OT_OPENVAT111_CalculateVATResolution(bpy.types.Operator):
                 self.report({'ERROR'}, f"Missing attributes: {', '.join(missing)}. Please rescan.")
                 return {'CANCELLED'}
 
-        if settings.proxy_method == 'START_FRAME':
-            
-            context.scene.frame_current = context.scene.frame_start
-        
         if settings.proxy_method == 'SELECTED_OBJECT':
             selected_objects = bpy.context.selected_objects
             active_object = bpy.context.active_object
             if len(selected_objects) != 2 or active_object not in selected_objects:
                 print("Exactly 2 objects must be selected, including the active one.")
                 return {'FINISHED'}
+
+        try:
+            utils.prepare_action_bake_timeline(context)
+        except Exception as exc:
+            self.report({'ERROR'}, str(exc))
+            return {'CANCELLED'}
+
+        if settings.proxy_method == 'START_FRAME':
+            context.scene.frame_current = context.scene.frame_start
+
         collection_mode = False
         collection_target = ""
         custom_proxy = False
@@ -146,7 +152,7 @@ class OBJECT_OT_OPENVAT111_CalculateVATResolution(bpy.types.Operator):
         remap_output_filepath = os.path.join(object_directory, f"{output_rename}-remap_info.json")
 
         # Ensure the required node groups are available
-        utils.ensure_node_group("ov_generated-pos")
+        generated_pos_group = utils.ensure_node_group("ov_generated-pos")
         utils.ensure_node_group("ov_vat-decoder-vs")
         utils.ensure_node_group("ov_calculate-position-vs")
         
@@ -156,15 +162,19 @@ class OBJECT_OT_OPENVAT111_CalculateVATResolution(bpy.types.Operator):
         
         positionNodes = bpy.ops.object.modifier_add(type='NODES')
         obj.modifiers[-1].name  = "positionCalculation"
-        obj.modifiers[-1].node_group = bpy.data.node_groups["ov_generated-pos"]
+        obj.modifiers[-1].node_group = generated_pos_group
         obj.modifiers[-1]["Socket_3"] = temp_obj
 
         # Execute the saturation remapping
         if settings.encode_type == 'DEFAULT':
             attribute_name = "colPos"
-            utils.make_remap_data(obj_name, attribute_name, frame_start, frame_end, output_filepath, remap_output_filepath, "")
+            try:
+                utils.make_remap_data(obj_name, attribute_name, frame_start, frame_end, output_filepath, remap_output_filepath, "")
+                min_x, min_y, min_z, max_x, max_y, max_z = utils.read_remap_info(remap_output_filepath, attribute_name)
+            except Exception as exc:
+                self.report({'ERROR'}, str(exc))
+                return {'CANCELLED'}
 
-            min_x, min_y, min_z, max_x, max_y, max_z = utils.read_remap_info(remap_output_filepath, attribute_name)
             context.scene['min_x'] = min_x
             context.scene['min_y'] = min_y
             context.scene['min_z'] = min_z
@@ -177,14 +187,18 @@ class OBJECT_OT_OPENVAT111_CalculateVATResolution(bpy.types.Operator):
             attr_g = settings.custom_attr_2
             attr_b = settings.custom_attr_3
 
-            utils.make_custom_data(obj_name, [attr_r, attr_g, attr_b], frame_start, frame_end, output_filepath, remap_output_filepath)
-            attrs = [
-                settings.custom_attr_1,
-                settings.custom_attr_2,
-                settings.custom_attr_3,
-            ]
+            try:
+                utils.make_custom_data(obj_name, [attr_r, attr_g, attr_b], frame_start, frame_end, output_filepath, remap_output_filepath)
+                attrs = [
+                    settings.custom_attr_1,
+                    settings.custom_attr_2,
+                    settings.custom_attr_3,
+                ]
 
-            min_r, min_g, min_b, max_r, max_g, max_b = utils.read_custom_info(remap_output_filepath, attrs)
+                min_r, min_g, min_b, max_r, max_g, max_b = utils.read_custom_info(remap_output_filepath, attrs)
+            except Exception as exc:
+                self.report({'ERROR'}, str(exc))
+                return {'CANCELLED'}
 
             context.scene['min_x'] = min_r
             context.scene['min_y'] = min_g

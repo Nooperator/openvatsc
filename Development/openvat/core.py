@@ -113,7 +113,7 @@ def setup_proxy_scene(obj, num_frames, width, height, num_wraps, temp_obj, pack_
     bpy.ops.object.editmode_toggle()
 
     bpy.ops.object.modifier_add(type='NODES')
-    proxy_obj.modifiers[-1].node_group = bpy.data.node_groups["ov_generated-pos"]
+    proxy_obj.modifiers[-1].node_group = utils.ensure_node_group("ov_generated-pos")
     create_uv_map(proxy_obj, width, height, num_frames)
         
     # Main VAT render
@@ -139,7 +139,7 @@ def setup_proxy_scene(obj, num_frames, width, height, num_wraps, temp_obj, pack_
         vat_obj.modifiers.remove(modifier)
     bpy.ops.object.modifier_add(type='NODES')
     mod = vat_obj.modifiers[-1]
-    mod.node_group = bpy.data.node_groups["ov_vat-decoder-vs"]
+    mod.node_group = utils.ensure_node_group("ov_vat-decoder-vs")
     
     mod["Socket_2_attribute_name"] = "VAT_UV"
     mod["Socket_6"] = num_frames
@@ -236,7 +236,7 @@ def setup_vat_scene(proxy_obj, obj_name, original_scene_name, num_frames, width,
     # Set compositing nodes in VAT scene
     setup_compositing(vat_scene, output_dir, vat_scene.name, proxy_obj, image_format, fmt)
 
-    nodegroup_method = "ov_calculate-position-vs"
+    nodegroup_method = utils.ensure_node_group("ov_calculate-position-vs").name
     
     encode_settings = original_scene.openvat_111_settings
     use_custom = False

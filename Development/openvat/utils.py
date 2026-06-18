@@ -7,15 +7,442 @@ import bmesh
 import os
 
 NODE_GROUPS_BLEND_FILE = os.path.join(os.path.dirname(__file__), "vat_node_groups.blend")
+OPENVAT_BUILD_ID = "openvat_111-1.1.5"
+NODE_GROUP_ALIASES = {
+    "ov_generated-pos": "ov111_generated-pos",
+    "ov_vat-decoder-vs": "ov111_vat-decoder-vs",
+    "ov_calculate-position-vs": "ov111_calculate-position-vs",
+}
+ACTION_BAKE_START_FRAME = 1
+ACTION_BAKE_GAP_FRAMES = 0
+ACTION_BAKE_TRACK_NAME = "OpenVAT111_ActionBake"
 
-def append_node_group(group_name):
+def get_animation_owner_name(owner):
+    if hasattr(owner, "id_data") and owner.id_data != owner:
+        return f"{owner.id_data.name}:{owner.name}"
+    return getattr(owner, "name", str(owner))
+
+def get_action_manual_range(action):
+    if getattr(action, "use_frame_range", None) is False:
+        return None, None, "manual frame range is disabled"
+
+    try:
+        if hasattr(action, "frame_start") and hasattr(action, "frame_end"):
+            start_frame = round(action.frame_start)
+            end_frame = round(action.frame_end)
+        elif hasattr(action, "frame_range"):
+            start_frame = round(action.frame_range[0])
+            end_frame = round(action.frame_range[1])
+        else:
+            return None, None, "frame range values are unavailable"
+    except (TypeError, IndexError):
+        return None, None, "manual frame range values are invalid"
+
+    if end_frame < start_frame:
+        return None, None, f"end frame {end_frame} is before start frame {start_frame}"
+
+    return int(start_frame), int(end_frame), None
+
+def action_targets_armature(action):
+    if getattr(action, "id_root", None) == 'ARMATURE':
+        return True
+
+    return any(
+        fc.data_path.startswith("pose.bones")
+        for fc in getattr(action, "fcurves", [])
+    )
+
+def action_targets_shape_keys(action):
+    if getattr(action, "id_root", None) == 'KEY':
+        return True
+
+    return any(
+        fc.data_path.startswith("key_blocks")
+        for fc in getattr(action, "fcurves", [])
+    )
+
+def add_unique_id(items, item):
+    if not item:
+        return
+
+    pointer = item.as_pointer() if hasattr(item, "as_pointer") else id(item)
+    if pointer not in {existing.as_pointer() if hasattr(existing, "as_pointer") else id(existing) for existing in items}:
+        items.append(item)
+
+def get_action_bake_objects(context):
+    scene = context.scene
+    settings = getattr(scene, "openvat_111_settings", None)
+    objects = []
+
+    if (
+        settings
+        and getattr(settings, "encode_target", None) == 'COLLECTION_COMBINE'
+        and getattr(settings, "vat_collection", None)
+    ):
+        for obj in settings.vat_collection.all_objects:
+            add_unique_id(objects, obj)
+    else:
+        add_unique_id(objects, context.object)
+        for obj in context.selected_objects:
+            add_unique_id(objects, obj)
+
+    for obj in list(objects):
+        if obj and obj.type == 'MESH':
+            for mod in obj.modifiers:
+                if mod.type == 'ARMATURE':
+                    add_unique_id(objects, mod.object)
+
+    return objects
+
+def get_action_bake_owners(context):
+    owners = []
+
+    for obj in get_action_bake_objects(context):
+        add_unique_id(owners, obj)
+        if obj and obj.type == 'MESH' and obj.data and obj.data.shape_keys:
+            add_unique_id(owners, obj.data.shape_keys)
+
+    return owners
+
+def animation_owner_uses_action(owner, action):
+    anim_data = getattr(owner, "animation_data", None)
+    if not anim_data:
+        return False
+
+    if getattr(anim_data, "action", None) == action:
+        return True
+
+    for track in getattr(anim_data, "nla_tracks", []):
+        for strip in track.strips:
+            if strip.action == action:
+                return True
+
+    return False
+
+def is_armature_animation_owner(owner):
+    return isinstance(owner, bpy.types.Object) and owner.type == 'ARMATURE'
+
+def is_shape_key_animation_owner(owner):
+    return isinstance(owner, bpy.types.Key)
+
+def preferred_owner_for_action(action, owners):
+    assigned_owners = [
+        owner for owner in owners
+        if animation_owner_uses_action(owner, action)
+    ]
+
+    if assigned_owners:
+        if action_targets_armature(action):
+            for owner in assigned_owners:
+                if is_armature_animation_owner(owner):
+                    return owner
+        if action_targets_shape_keys(action):
+            for owner in assigned_owners:
+                if is_shape_key_animation_owner(owner):
+                    return owner
+        return assigned_owners[0]
+
+    if action_targets_armature(action):
+        for owner in owners:
+            if is_armature_animation_owner(owner):
+                return owner
+        return None
+
+    if action_targets_shape_keys(action):
+        for owner in owners:
+            if is_shape_key_animation_owner(owner):
+                return owner
+        return None
+
+    active = bpy.context.object
+    if active in owners:
+        return active
+
+    for owner in owners:
+        if isinstance(owner, bpy.types.Object):
+            return owner
+
+    return owners[0] if owners else None
+
+def get_valid_action_items(context):
+    valid_items = []
+    skipped_actions = []
+    owners = get_action_bake_owners(context)
+
+    for action in bpy.data.actions:
+        start_frame, end_frame, skip_reason = get_action_manual_range(action)
+
+        if skip_reason:
+            skipped_actions.append({
+                "name": action.name,
+                "reason": skip_reason,
+            })
+            continue
+
+        target = preferred_owner_for_action(action, owners)
+        if not target:
+            skipped_actions.append({
+                "name": action.name,
+                "reason": "no compatible target object or animation owner found",
+            })
+            continue
+
+        valid_items.append({
+            "action": action,
+            "target": target,
+            "source_start": start_frame,
+            "source_end": end_frame,
+        })
+
+    valid_items.sort(key=lambda item: (
+        item["action"].name.casefold(),
+        item["action"].name,
+        item["source_start"],
+        item["source_end"],
+    ))
+
+    return valid_items, skipped_actions
+
+def print_skipped_actions(skipped_actions):
+    if not skipped_actions:
+        return
+
+    print(f"Skipped {len(skipped_actions)} Action(s):")
+    for item in skipped_actions:
+        print(f"  - {item['name']}: {item['reason']}")
+
+def get_unique_animation_owners(items):
+    owners = []
+    for item in items:
+        add_unique_id(owners, item["target"])
+    return owners
+
+def clear_vat_anim_data(scene):
+    data = get_vat_animation_entries(scene)
+
+    if hasattr(data, "clear"):
+        data.clear()
+    else:
+        while len(data) > 0:
+            data.remove(0)
+
+def add_vat_entry(scene, name, start_frame, end_frame):
+    data = get_vat_animation_entries(scene)
+    if not hasattr(data, "add"):
+        raise RuntimeError("No VAT animation data collection is registered on the scene.")
+
+    entry = data.add()
+    entry.name = name
+    entry.start_frame = int(start_frame)
+    entry.end_frame = int(end_frame)
+    if hasattr(entry, "framerate"):
+        entry.framerate = get_scene_framerate(scene)
+    if hasattr(entry, "looping"):
+        entry.looping = True
+    return entry
+
+def ensure_animation_data(owner):
+    owner.animation_data_create()
+    return owner.animation_data
+
+def remove_existing_action_bake_tracks(targets):
+    for target in targets:
+        anim_data = getattr(target, "animation_data", None)
+        if not anim_data:
+            continue
+
+        for track in list(anim_data.nla_tracks):
+            if track.name == ACTION_BAKE_TRACK_NAME:
+                anim_data.nla_tracks.remove(track)
+
+def get_or_create_action_bake_track(target):
+    anim_data = ensure_animation_data(target)
+    track = anim_data.nla_tracks.new()
+    track.name = ACTION_BAKE_TRACK_NAME
+    track.mute = False
+    track.lock = False
+    return track
+
+def make_action_bake_strip(track, item, timeline_start, timeline_end):
+    action = item["action"]
+    source_start = item["source_start"]
+    source_end = item["source_end"]
+    strip_end = max(timeline_end, timeline_start + 1)
+
+    strip = track.strips.new(action.name, timeline_start, action)
+    strip.frame_start = timeline_start
+    strip.frame_end = strip_end
+    strip.action_frame_start = source_start
+    strip.action_frame_end = max(source_end, source_start + 1)
+    strip.repeat = 1.0
+    strip.scale = 1.0
+    strip.blend_type = 'REPLACE'
+    strip.extrapolation = 'NOTHING'
+    return strip
+
+def layout_actions_for_bake(scene, valid_items):
+    tracks_by_target = {}
+    cursor = ACTION_BAKE_START_FRAME
+    laid_out_items = []
+
+    remove_existing_action_bake_tracks(get_unique_animation_owners(valid_items))
+
+    for item in valid_items:
+        target = item["target"]
+        target_key = target.as_pointer() if hasattr(target, "as_pointer") else id(target)
+        if target_key not in tracks_by_target:
+            tracks_by_target[target_key] = get_or_create_action_bake_track(target)
+
+        source_duration = item["source_end"] - item["source_start"]
+        timeline_start = cursor
+        timeline_end = cursor + source_duration
+
+        make_action_bake_strip(tracks_by_target[target_key], item, timeline_start, timeline_end)
+        ensure_animation_data(target).action = None
+
+        laid_out_items.append({
+            **item,
+            "timeline_start": timeline_start,
+            "timeline_end": timeline_end,
+        })
+
+        cursor = timeline_end + ACTION_BAKE_GAP_FRAMES + 1
+
+    scene.frame_start = ACTION_BAKE_START_FRAME
+    scene.frame_end = max(item["timeline_end"] for item in laid_out_items)
+
+    return laid_out_items
+
+def prepare_action_bake_timeline(context):
+    scene = context.scene
+    valid_items, skipped_actions = get_valid_action_items(context)
+
+    if not valid_items:
+        print_skipped_actions(skipped_actions)
+        raise RuntimeError("No Actions with valid manual frame ranges and compatible targets found.")
+
+    laid_out_items = layout_actions_for_bake(scene, valid_items)
+    clear_vat_anim_data(scene)
+
+    for item in laid_out_items:
+        add_vat_entry(
+            scene,
+            item["action"].name,
+            item["timeline_start"],
+            item["timeline_end"],
+        )
+
+    print_skipped_actions(skipped_actions)
+    print("Action-based VAT bake timeline prepared.")
+    print(f"Created {len(laid_out_items)} VAT animation entries.")
+    print(f"Timeline range: {scene.frame_start} - {scene.frame_end}")
+    print(f"Created bake track '{ACTION_BAKE_TRACK_NAME}' on:")
+    for target in get_unique_animation_owners(laid_out_items):
+        print(f"  - {get_animation_owner_name(target)}")
+
+    return laid_out_items
+
+def append_node_group(group_name, target_name=None):
+    target_name = target_name or group_name
+    existing_groups = {group.name for group in bpy.data.node_groups}
+
     with bpy.data.libraries.load(NODE_GROUPS_BLEND_FILE, link=False) as (data_from, data_to):
         if group_name in data_from.node_groups:
             data_to.node_groups.append(group_name)
+        else:
+            raise RuntimeError(f"Node group '{group_name}' not found in {NODE_GROUPS_BLEND_FILE}")
+
+    appended_groups = [
+        group for group in bpy.data.node_groups
+        if group.name not in existing_groups
+    ]
+    candidates = [
+        group for group in appended_groups
+        if group.name == group_name or group.name.startswith(f"{group_name}.")
+    ]
+
+    if not candidates:
+        raise RuntimeError(f"Failed to append node group '{group_name}'")
+
+    group = candidates[0]
+    group.name = target_name
+    return group
 
 def ensure_node_group(group_name):
-    if group_name not in bpy.data.node_groups:
-        append_node_group(group_name)
+    local_name = NODE_GROUP_ALIASES.get(group_name, group_name)
+    if local_name not in bpy.data.node_groups:
+        return append_node_group(group_name, local_name)
+    return bpy.data.node_groups[local_name]
+
+def get_scene_framerate(scene):
+    fps_base = getattr(scene.render, "fps_base", 1.0) or 1.0
+    return scene.render.fps / fps_base
+
+def get_action_frame_range(action):
+    if hasattr(action, "frame_start") and hasattr(action, "frame_end"):
+        start_frame = round(action.frame_start)
+        end_frame = round(action.frame_end)
+    elif hasattr(action, "frame_range"):
+        start_frame = round(action.frame_range[0])
+        end_frame = round(action.frame_range[1])
+    else:
+        return None
+
+    if end_frame < start_frame:
+        return None
+
+    return int(start_frame), int(end_frame)
+
+def get_vat_animation_entries(scene):
+    if hasattr(scene, "openvat_111_anim_data"):
+        return scene.openvat_111_anim_data
+    if hasattr(scene, "vat_anim_data"):
+        return scene.vat_anim_data
+    return []
+
+def make_animation_metadata(scene):
+    animations = {}
+    default_framerate = get_scene_framerate(scene)
+
+    for entry in get_vat_animation_entries(scene):
+        name = getattr(entry, "name", "").strip()
+        if not name:
+            continue
+
+        animations[name] = {
+            "startFrame": int(getattr(entry, "start_frame", 0)),
+            "endFrame": int(getattr(entry, "end_frame", 0)),
+            "framerate": float(getattr(entry, "framerate", default_framerate)),
+            "looping": bool(getattr(entry, "looping", True)),
+        }
+
+    if animations:
+        return animations
+
+    for action in bpy.data.actions:
+        frame_range = get_action_frame_range(action)
+        if frame_range is None:
+            continue
+
+        start_frame, end_frame = frame_range
+
+        animations[action.name] = {
+            "startFrame": start_frame,
+            "endFrame": end_frame,
+            "framerate": float(default_framerate),
+            "looping": True,
+        }
+
+    return animations
+
+def add_animation_metadata(data, scene):
+    data["_openvatBuild"] = OPENVAT_BUILD_ID
+    animations = make_animation_metadata(scene)
+    if animations:
+        data["animations"] = animations
+        print(f"Added {len(animations)} VAT animation metadata entr{'y' if len(animations) == 1 else 'ies'} to JSON")
+    else:
+        print("No VAT animation metadata entries found; JSON will use importer default animation")
 
 def make_custom_data(obj_name, attr_names, frame_start, frame_end, output_filepath, remap_output_filepath):
     obj = bpy.data.objects.get(obj_name)
@@ -41,12 +468,17 @@ def make_custom_data(obj_name, attr_names, frame_start, frame_end, output_filepa
             values = get_geometry_nodes_data(obj, attr)
             frame_data[frame] = values
 
+        if not any(frame_data.values()):
+            raise ValueError(f"No values were sampled for custom attribute '{attr}' on '{obj.name}'")
+
         attr_min, attr_max = find_scalar_max_min(frame_data)
         channel_remap_data[attr] = {
             "Min": attr_min,
             "Max": attr_max,
             "Frames": frames
         }
+
+    add_animation_metadata(channel_remap_data, bpy.context.scene)
 
     # Write or return the remap info
     with open(remap_output_filepath, 'w') as f:
@@ -67,7 +499,18 @@ def make_remap_data(obj_name, attribute_name, frame_start, frame_end, output_fil
         bpy.context.scene.frame_set(frame)
         frame_data = get_geometry_nodes_data(obj, attribute_name)
         all_frames_data[frame] = frame_data
+
+    if not any(all_frames_data.values()):
+        raise ValueError(
+            f"No values were sampled for attribute '{attribute_name}' on '{obj.name}'. "
+            "Check that this build's Geometry Nodes groups loaded correctly."
+        )
+
     overall_max, overall_min = find_max_min_values(all_frames_data)
+    sampled_all_zero = (
+        overall_min == [0.0, 0.0, 0.0]
+        and overall_max == [0.0, 0.0, 0.0]
+    )
     
     if attribute_name == "colPos":
         attribute_name = "os-remap"
@@ -101,6 +544,11 @@ def make_remap_data(obj_name, attribute_name, frame_start, frame_end, output_fil
             }
     }
     
+    add_animation_metadata(remap_info, bpy.context.scene)
+    if sampled_all_zero:
+        remap_info["_openvatWarnings"] = [
+            "Sampled position offsets are all zero. The encoded target appears static relative to the proxy over this frame range."
+        ]
     write_json(remap_info, remap_output_filepath)
     print(f"Remap information saved to {remap_output_filepath}")
 

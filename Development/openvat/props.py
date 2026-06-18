@@ -9,6 +9,35 @@ def make_dynamic_enum(idname):
         return base
     return callback
 
+
+class OpenVAT111AnimationEntry(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty(
+        name="Name",
+        default="",
+    )
+
+    start_frame: bpy.props.IntProperty(
+        name="Start Frame",
+        default=1,
+    )
+
+    end_frame: bpy.props.IntProperty(
+        name="End Frame",
+        default=1,
+    )
+
+    looping: bpy.props.BoolProperty(
+        name="Looping",
+        default=True,
+    )
+
+    framerate: bpy.props.FloatProperty(
+        name="Framerate",
+        default=30.0,
+        min=0.001,
+    )
+
+
 class OpenVAT111Settings(bpy.types.PropertyGroup):
     vat_output_directory: bpy.props.StringProperty(
         name="Output Directory",
@@ -189,4 +218,4 @@ class OpenVAT111Settings(bpy.types.PropertyGroup):
     )
 
 
-classes = [OpenVAT111Settings]
+classes = [OpenVAT111AnimationEntry, OpenVAT111Settings]

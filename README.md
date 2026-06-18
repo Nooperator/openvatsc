@@ -1,11 +1,21 @@
 # OpenVAT – Vertex Animation Toolkit for Blender
 
 **Author:** Luke Stilson  
-**Version:** 1.1.1
+**Version:** 1.1.5
 **Blender Compatibility:** 4.2.0+  5.0 now supported and backwards compatible, please report any issues with 5.0 or issues with previous versions that may arise from this update. 
 **Versions:** Check Development/Builds folder for previous stable builds
 
-## New in 1.1.1
+## New in 1.1.5
+### Alphabetical Action Bake Order
+- Action-based VAT bake tracks are now laid out alphabetically by Action name, so names like `0base` are placed first.
+
+## New in 1.1.4
+### Action-based VAT Bake Metadata
+- The side-by-side `openvat_111` build now prepares an Action-based bake timeline automatically when encoding.
+- Actions with valid manual frame ranges are laid out sequentially on an `OpenVAT111_ActionBake` NLA track before the VAT is sampled.
+- Exported JSON animation ranges now use the generated bake timeline ranges, not each Action's original local frame range.
+
+## New in 1.1.3
 ### Animation Data Panel
 A new **Animation Data** panel has been added.
 
