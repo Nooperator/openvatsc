@@ -17,7 +17,7 @@ def ensure_node_group(group_name):
     if group_name not in bpy.data.node_groups:
         append_node_group(group_name)
 
-def make_custom_data(obj_name, attr_names, frame_start, frame_end, output_filepath, remap_output_filepath):
+def make_custom_data(obj_name, attr_names, frame_start, frame_end, output_filepath, remap_output_filepath, framerate=30, looping=True):
     obj = bpy.data.objects.get(obj_name)
     if obj is None:
         print(f"Object '{obj_name}' not found")
@@ -52,7 +52,38 @@ def make_custom_data(obj_name, attr_names, frame_start, frame_end, output_filepa
     with open(remap_output_filepath, 'w') as f:
         json.dump(channel_remap_data, f, indent=4)
 
-def make_remap_data(obj_name, attribute_name, frame_start, frame_end, output_filepath, remap_output_filepath, scalar_value):
+    # --- NEW: Add animation data section to main output ---
+    try:
+        # Load existing data (if any)
+        if os.path.exists(output_filepath):
+            with open(output_filepath, 'r') as f:
+                output_data = json.load(f)
+        else:
+            output_data = {}
+
+        # Add/overwrite animations section
+        anim_entry = {
+            "startFrame": frame_start,
+            "endFrame": frame_end,
+            "framerate": framerate,
+            "looping": looping
+        }
+        # If already has an animations list, append; else, create new
+        if "animations" not in output_data:
+            output_data["animations"] = []
+        output_data["animations"].append(anim_entry)
+
+        # Write back to file
+        with open(output_filepath, 'w') as f:
+            json.dump(output_data, f, indent=4)
+
+    except Exception as e:
+        print(f"Error updating animation data: {e}")
+
+def make_remap_data(obj_name, attribute_name, frame_start, frame_end, output_filepath, remap_output_filepath,animations, scalar_value=""):
+    import os
+    import json
+
     obj = bpy.data.objects.get(obj_name)
     if obj is None:
         print(f"Object '{obj_name}' not found")
@@ -97,12 +128,42 @@ def make_remap_data(obj_name, attribute_name, frame_start, frame_end, output_fil
             attribute_name: {
                 "Min": overall_min,
                 "Max": overall_max,
-                "Frames": frames
+                "Frames": frames,
             }
     }
     
+    # Write the remap info
     write_json(remap_info, remap_output_filepath)
     print(f"Remap information saved to {remap_output_filepath}")
+
+    # --- NEW: Add animation data section to main output ---
+    try:
+        # Load existing data (if any)
+        if os.path.exists(output_filepath):
+            with open(output_filepath, 'r') as f:
+                output_data = json.load(f)
+        else:
+            output_data = {}
+
+        # Add/overwrite animations section
+        anim_dict = {}
+        for anim in animations:
+            anim_dict[anim.name] = {
+                "startFrame": anim.start_frame,
+                "endFrame": anim.end_frame,
+                "framerate": anim.framerate,
+                "looping": anim.looping
+            }
+
+        output_data["animations"] = anim_dict
+
+        # Write back to file
+        with open(output_filepath, 'w') as f:
+            json.dump(output_data, f, indent=4)
+
+    except Exception as e:
+        print(f"Error updating animation data: {e}")
+
 
 # Get data from dependency graph
 def get_geometry_nodes_data(obj, attribute_name):
