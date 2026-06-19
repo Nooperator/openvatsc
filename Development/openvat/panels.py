@@ -110,7 +110,7 @@ class VAT_OT_RemoveAnimEntry(bpy.types.Operator):
 class VAT_OT_PopulateNLAFromActions(bpy.types.Operator):
     bl_idname = "vat.populate_nla_from_actions"
     bl_label = "Populate NLA From Actions"
-    bl_description = "Create OpenVAT NLA tracks from every action in alphanumeric order, using each action's manual frame range"
+    bl_description = "Create one sequential OpenVAT NLA track from every action in alphanumeric order, using each action's manual frame range"
 
     @staticmethod
     def _natural_key(name):
@@ -143,6 +143,7 @@ class VAT_OT_PopulateNLAFromActions(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.active_object
+        auto_track_name = "OpenVAT Actions"
         if obj is None:
             self.report({'ERROR'}, "No active object selected")
             return {'CANCELLED'}
@@ -165,36 +166,44 @@ class VAT_OT_PopulateNLAFromActions(bpy.types.Operator):
         for track in list(anim_data.nla_tracks):
             is_stored_track = track.name in stored_track_names
             is_failed_empty_track = track.name in action_names and len(track.strips) == 0
+            is_empty_auto_track = track.name.startswith(auto_track_name) and len(track.strips) == 0
             if is_stored_track or is_failed_empty_track:
                 anim_data.nla_tracks.remove(track)
+            elif is_empty_auto_track:
+                anim_data.nla_tracks.remove(track)
 
-        previous_track = None
-        generated_track_names = []
+        track = self._new_nla_track(anim_data.nla_tracks, None)
+        track.name = auto_track_name
+        scene["openvat_auto_nla_tracks"] = json.dumps([track.name])
+        timeline_start = int(round(scene.frame_start))
         for action in actions:
-            start, end = self._action_frame_range(action)
-            track = self._new_nla_track(anim_data.nla_tracks, previous_track)
-            track.name = action.name
-            generated_track_names.append(track.name)
+            source_start, source_end = self._action_frame_range(action)
+            duration = source_end - source_start + 1
+            timeline_end = timeline_start + duration - 1
 
-            strip = track.strips.new(action.name, start, action)
-            strip.action_frame_start = start
-            strip.action_frame_end = end
-            strip.frame_start = start
-            strip.frame_end = end
-            previous_track = track
+            strip = track.strips.new(action.name, timeline_start, action)
+            strip.action_frame_start = source_start
+            strip.action_frame_end = source_end
+            strip.frame_start = timeline_start
+            strip.frame_end = timeline_end
+            timeline_start = timeline_end + 1
 
-        scene["openvat_auto_nla_tracks"] = json.dumps(generated_track_names)
         scene.vat_anim_data.clear()
+        timeline_start = int(round(scene.frame_start))
         for action in actions:
-            start, end = self._action_frame_range(action)
+            source_start, source_end = self._action_frame_range(action)
+            duration = source_end - source_start + 1
+            timeline_end = timeline_start + duration - 1
             entry = scene.vat_anim_data.add()
             entry.name = action.name
-            entry.start_frame = start
-            entry.end_frame = end
+            entry.start_frame = timeline_start
+            entry.end_frame = timeline_end
+            timeline_start = timeline_end + 1
 
         scene.vat_anim_index = 0 if scene.vat_anim_data else -1
+        scene.frame_end = timeline_start - 1
 
-        self.report({'INFO'}, f"Populated {len(actions)} NLA track(s)")
+        self.report({'INFO'}, f"Populated {len(actions)} action strip(s)")
         return {'FINISHED'}
 
 class VAT_UL_AnimList(bpy.types.UIList):

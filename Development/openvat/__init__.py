@@ -1,6 +1,6 @@
 bl_info = {
     "name": "OpenVAT",
-    "version": (1, 2, 1),
+    "version": (1, 2, 3),
     "blender": (4, 2, 0),
     "description": "Encode and preview vertex animation textures",
     "category": "Development",
@@ -11,7 +11,7 @@ Title: OpenVAT Encoder
 Description: Encode and preview vertex animation textures
 Author: Luke Stilson
 Date: 2025-04-29
-Version: 1.2.1
+Version: 1.2.3
 
 """
 
