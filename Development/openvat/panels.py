@@ -1,4 +1,5 @@
 import bpy
+import json
 import os
 import re
 from . import utils
@@ -152,17 +153,28 @@ class VAT_OT_PopulateNLAFromActions(bpy.types.Operator):
             return {'CANCELLED'}
 
         anim_data = obj.animation_data_create()
+        scene = context.scene
+        action_names = {action.name for action in actions}
+        stored_track_names = set()
+
+        try:
+            stored_track_names = set(json.loads(scene.get("openvat_auto_nla_tracks", "[]")))
+        except (TypeError, ValueError):
+            stored_track_names = set()
 
         for track in list(anim_data.nla_tracks):
-            if track.get("openvat_auto_populated"):
+            is_stored_track = track.name in stored_track_names
+            is_failed_empty_track = track.name in action_names and len(track.strips) == 0
+            if is_stored_track or is_failed_empty_track:
                 anim_data.nla_tracks.remove(track)
 
         previous_track = None
+        generated_track_names = []
         for action in actions:
             start, end = self._action_frame_range(action)
             track = self._new_nla_track(anim_data.nla_tracks, previous_track)
             track.name = action.name
-            track["openvat_auto_populated"] = True
+            generated_track_names.append(track.name)
 
             strip = track.strips.new(action.name, start, action)
             strip.action_frame_start = start
@@ -171,7 +183,7 @@ class VAT_OT_PopulateNLAFromActions(bpy.types.Operator):
             strip.frame_end = end
             previous_track = track
 
-        scene = context.scene
+        scene["openvat_auto_nla_tracks"] = json.dumps(generated_track_names)
         scene.vat_anim_data.clear()
         for action in actions:
             start, end = self._action_frame_range(action)
