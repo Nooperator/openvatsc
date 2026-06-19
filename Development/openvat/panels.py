@@ -1,5 +1,6 @@
 import bpy
 import os
+import re
 from . import utils
 from . import operators
 
@@ -105,6 +106,85 @@ class VAT_OT_RemoveAnimEntry(bpy.types.Operator):
             context.scene.vat_anim_index = min(idx, len(data) - 1)
         return {'FINISHED'}
 
+class VAT_OT_PopulateNLAFromActions(bpy.types.Operator):
+    bl_idname = "vat.populate_nla_from_actions"
+    bl_label = "Populate NLA From Actions"
+    bl_description = "Create OpenVAT NLA tracks from every action in alphanumeric order, using each action's manual frame range"
+
+    @staticmethod
+    def _natural_key(name):
+        return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", name)]
+
+    @staticmethod
+    def _action_frame_range(action):
+        if hasattr(action, "frame_start") and hasattr(action, "frame_end"):
+            start = action.frame_start
+            end = action.frame_end
+        else:
+            start, end = action.frame_range
+
+        start = int(round(start))
+        end = int(round(end))
+
+        if end <= start:
+            end = start + 1
+
+        return start, end
+
+    @staticmethod
+    def _new_nla_track(nla_tracks, previous_track):
+        try:
+            return nla_tracks.new(prev=previous_track)
+        except TypeError:
+            if previous_track is None:
+                return nla_tracks.new()
+            return nla_tracks.new(previous_track)
+
+    def execute(self, context):
+        obj = context.active_object
+        if obj is None:
+            self.report({'ERROR'}, "No active object selected")
+            return {'CANCELLED'}
+
+        actions = sorted(bpy.data.actions, key=lambda action: self._natural_key(action.name))
+        if not actions:
+            self.report({'ERROR'}, "No actions found")
+            return {'CANCELLED'}
+
+        anim_data = obj.animation_data_create()
+
+        for track in list(anim_data.nla_tracks):
+            if track.get("openvat_auto_populated"):
+                anim_data.nla_tracks.remove(track)
+
+        previous_track = None
+        for action in actions:
+            start, end = self._action_frame_range(action)
+            track = self._new_nla_track(anim_data.nla_tracks, previous_track)
+            track.name = action.name
+            track["openvat_auto_populated"] = True
+
+            strip = track.strips.new(action.name, start, action)
+            strip.action_frame_start = start
+            strip.action_frame_end = end
+            strip.frame_start = start
+            strip.frame_end = end
+            previous_track = track
+
+        scene = context.scene
+        scene.vat_anim_data.clear()
+        for action in actions:
+            start, end = self._action_frame_range(action)
+            entry = scene.vat_anim_data.add()
+            entry.name = action.name
+            entry.start_frame = start
+            entry.end_frame = end
+
+        scene.vat_anim_index = 0 if scene.vat_anim_data else -1
+
+        self.report({'INFO'}, f"Populated {len(actions)} NLA track(s)")
+        return {'FINISHED'}
+
 class VAT_UL_AnimList(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         layout.label(text=item.name)
@@ -126,6 +206,8 @@ class VAT_PT_AnimDataPanel(bpy.types.Panel):
         col = row.column(align=True)
         col.operator("vat.add_anim_entry", icon='ADD', text="")
         col.operator("vat.remove_anim_entry", icon='REMOVE', text="")
+
+        layout.operator("vat.populate_nla_from_actions", icon='ACTION')
 
         # Edit selected animation data
         if scene.vat_anim_data and 0 <= scene.vat_anim_index < len(scene.vat_anim_data):
@@ -273,4 +355,4 @@ class OBJECT_PT_VAT_OUTPUT(bpy.types.Panel):
                 row.label(text="Resolution calculated per batch object", icon="OUTLINER_OB_IMAGE")
                 
 
-classes = [OBJECT_PT_VAT_OPTIONS, OBJECT_PT_VAT_OUTPUT, VAT_OT_AddAnimEntry, VAT_OT_RemoveAnimEntry, VAT_UL_AnimList, VAT_PT_AnimDataPanel]
+classes = [OBJECT_PT_VAT_OPTIONS, OBJECT_PT_VAT_OUTPUT, VAT_OT_AddAnimEntry, VAT_OT_RemoveAnimEntry, VAT_OT_PopulateNLAFromActions, VAT_UL_AnimList, VAT_PT_AnimDataPanel]
