@@ -199,6 +199,10 @@ def setup_vat_scene(proxy_obj, obj_name, original_scene_name, num_frames, width,
     
     vat_scene.render.resolution_x = width
     vat_scene.render.resolution_y = height
+    vat_scene.render.resolution_percentage = 100
+    vat_scene.render.pixel_aspect_x = 1
+    vat_scene.render.pixel_aspect_y = 1
+    print(f"VAT render resolution: {width} x {height} at 100% scale")
     vat_scene.display_settings.display_device = 'sRGB'
     vat_scene.view_settings.view_transform = 'Raw'
     vat_scene.render.film_transparent = True
@@ -386,12 +390,55 @@ def setup_unnormalize(vat_scene, original_scene, attribute_name):
 
     print("✅ Unnormalize-only compositing setup complete using Map Range nodes.")
 
+def prepare_vat_image(image, raw_format):
+    image.colorspace_settings.name = 'Non-Color'
+    if 'EXR' in raw_format:
+        image.use_half_precision = False
+
+def remove_unlinked_image(image_name):
+    image = bpy.data.images.get(image_name)
+    if image and image.users == 0:
+        bpy.data.images.remove(image)
+
+def refresh_accumulation_image(vat_scene, output_path, image_name, raw_format):
+    if not vat_scene.use_nodes or not os.path.exists(output_path):
+        return
+
+    image_node = vat_scene.node_tree.nodes.get("Image")
+    if image_node is None:
+        return
+
+    previous_image = image_node.image
+    image = bpy.data.images.load(output_path, check_existing=False)
+    image.name = f"{image_name}_accumulation_source"
+    prepare_vat_image(image, raw_format)
+    image_node.image = image
+
+    if previous_image and previous_image != image and previous_image.users == 0:
+        bpy.data.images.remove(previous_image)
+
+def load_final_render_image(output_path, image_name, raw_format):
+    if not os.path.exists(output_path):
+        return None
+
+    image = bpy.data.images.get(image_name)
+    if image is None:
+        image = bpy.data.images.load(output_path, check_existing=False)
+        image.name = image_name
+    else:
+        image.filepath = output_path
+        image.reload()
+
+    prepare_vat_image(image, raw_format)
+    return image
+
 # Called to render temporary frames to first prime the compositor, then through sequence for vat and optionally vnrm    
 def render_vat_scene(vat_scene, num_frames, output_dir, image_format, raw_format):
     start_frame = vat_scene.frame_start
     end_frame = vat_scene.frame_start + num_frames
     output_name = vat_scene.name.replace("_ovbake", "")
     output_path = os.path.join(output_dir, f"{output_name}", f"{output_name}{image_format}")
+    image_name = output_name + image_format
     img_settings = vat_scene.render.image_settings
     
     if raw_format == 'PNG8':
@@ -415,28 +462,22 @@ def render_vat_scene(vat_scene, num_frames, output_dir, image_format, raw_format
         img_settings.exr_codec = 'NONE'
 
     nrmoutput_path = os.path.join(output_dir, f"{output_name}", vat_scene.name.replace("_vat", "_vnrm") + image_format)
-    if os.path.exists(output_path):
-        bpy.data.images.remove(bpy.data.images.load(output_path))
+    if os.path.exists(output_path) and not vat_scene.use_nodes:
+        remove_unlinked_image(image_name)
     for frame in range(start_frame -1, end_frame):
+        refresh_accumulation_image(vat_scene, output_path, image_name, raw_format)
         vat_scene.frame_set(frame)
         vat_scene.render.filepath = output_path
         bpy.ops.render.render(write_still=True)
-        img = bpy.data.images.get(output_name + image_format)
+        img = bpy.data.images.get(image_name)
         if img is not None:
             img.reload()
         else:
             img = bpy.data.images.load(output_path)
             print(f"Rendered template frame for compositing {frame}")
-        if 'EXR' in raw_format:
-            img.use_half_precision = False
+        prepare_vat_image(img, raw_format)
 
-    img = bpy.data.images.load(output_path)
-    if img is not None:
-        img.reload()
-        if 'EXR' in raw_format:
-            img.use_half_precision = False
-        vat_scene.render.filepath = output_path
-        bpy.ops.render.render(write_still=True)
+    load_final_render_image(output_path, image_name, raw_format)
 
     print(f"VAT Encoding finished, exported to {output_dir}")
     
@@ -447,6 +488,7 @@ def render_vat_nrml(vat_scene, num_frames, output_dir, image_format, raw_format)
     output_name = vat_scene.name.replace("_ovbake", "")
     rendername = output_name.replace("_vat", "_vnrm")
     output_path = os.path.join(output_dir, f"{output_name}", f"{rendername}{image_format}")
+    image_name = rendername + image_format
     img_settings = vat_scene.render.image_settings
 
     if raw_format == 'PNG8':
@@ -470,25 +512,23 @@ def render_vat_nrml(vat_scene, num_frames, output_dir, image_format, raw_format)
         img_settings.exr_codec = 'NONE'
 
 
-    if os.path.exists(output_path):
-        bpy.data.images.remove(bpy.data.images.load(output_path)) 
+    if os.path.exists(output_path) and not vat_scene.use_nodes:
+        remove_unlinked_image(image_name)
     for frame in range(start_frame -1, end_frame):
+        refresh_accumulation_image(vat_scene, output_path, image_name, raw_format)
         vat_scene.frame_set(frame)
         vat_scene.render.filepath = output_path
         bpy.ops.render.render(write_still=True)
-        img = bpy.data.images.get(rendername + image_format)
+        img = bpy.data.images.get(image_name)
         if img is not None:
             img.reload()
         else:
             img = bpy.data.images.load(output_path)
             print(f"Rendered template frame for normals compositing {frame}")
-   
+        prepare_vat_image(img, raw_format)
 
-    img = bpy.data.images.load(output_path)
+    img = load_final_render_image(output_path, image_name, raw_format)
     if img is not None:
-        img.reload()
-        vat_scene.render.filepath = output_path
-        bpy.ops.render.render(write_still=True)
         
         #Reset Color Mode
         bpy.context.scene.render.image_settings.color_mode = 'RGBA'

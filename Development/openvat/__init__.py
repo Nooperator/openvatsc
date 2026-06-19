@@ -1,9 +1,9 @@
 """
-Title: OpenVAT 1.1.5 Encoder
+Title: OpenVAT 1.1.7 Encoder
 Description: Encode and preview vertex animation textures
 Author: Luke Stilson
 Date: 2025-04-29
-Version: 1.1.5
+Version: 1.1.7
 
 """
 

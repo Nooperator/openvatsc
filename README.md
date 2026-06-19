@@ -1,9 +1,17 @@
 # OpenVAT – Vertex Animation Toolkit for Blender
 
 **Author:** Luke Stilson  
-**Version:** 1.1.5
+**Version:** 1.1.7
 **Blender Compatibility:** 4.2.0+  5.0 now supported and backwards compatible, please report any issues with 5.0 or issues with previous versions that may arise from this update. 
 **Versions:** Check Development/Builds folder for previous stable builds
+
+## New in 1.1.7
+### VAT Row Accumulation Fix
+- VAT and normal texture render loops now keep the accumulated compositor source alive and reload a fresh previous-output image before each frame, preventing exports that only contain the latest row.
+
+## New in 1.1.6
+### Exact VAT Render Scale
+- VAT render scenes now force render scale to 100% and square pixels, preventing texture rows from collapsing when the source file uses a low render percentage.
 
 ## New in 1.1.5
 ### Alphabetical Action Bake Order

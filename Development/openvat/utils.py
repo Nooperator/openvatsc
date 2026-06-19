@@ -7,7 +7,7 @@ import bmesh
 import os
 
 NODE_GROUPS_BLEND_FILE = os.path.join(os.path.dirname(__file__), "vat_node_groups.blend")
-OPENVAT_BUILD_ID = "openvat_111-1.1.5"
+OPENVAT_BUILD_ID = "openvat_111-1.1.7"
 NODE_GROUP_ALIASES = {
     "ov_generated-pos": "ov111_generated-pos",
     "ov_vat-decoder-vs": "ov111_vat-decoder-vs",

@@ -5,10 +5,10 @@ from . import operators
 
 class OBJECT_PT_OPENVAT111_OPTIONS(bpy.types.Panel):
     bl_idname = "OBJECT_PT_openvat_111_options"
-    bl_label = "OpenVAT 1.1.5 Encoding"
+    bl_label = "OpenVAT 1.1.7 Encoding"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'OpenVAT 1.1.5'
+    bl_category = 'OpenVAT 1.1.7'
 
     def draw(self, context):
         layout = self.layout
@@ -82,10 +82,10 @@ class OBJECT_PT_OPENVAT111_OPTIONS(bpy.types.Panel):
 # Output Settings - relating to data being exported      
 class OBJECT_PT_OPENVAT111_OUTPUT(bpy.types.Panel):
     bl_idname = "OBJECT_PT_openvat_111_output"
-    bl_label = "OpenVAT 1.1.5 Output"
+    bl_label = "OpenVAT 1.1.7 Output"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'OpenVAT 1.1.5'
+    bl_category = 'OpenVAT 1.1.7'
 
     def draw(self, context):
         layout = self.layout
